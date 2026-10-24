@@ -555,7 +555,8 @@ const LOAD={total:8,done:0};
 const loadMsgs=["Building the 3D model, materials and lighting. This takes a few moments the first time.","Placing the furniture and the family on site…","Lighting the pool and the terrace for blue hour…","Almost ready. Real-time rendering of this quality usually needs a render studio."];
 function loadTick(){ LOAD.done++; const p=Math.min(1,LOAD.done/LOAD.total); const b=document.getElementById("loadBar"); if(b) b.style.width=Math.round(p*100)+"%";
   const m=document.getElementById("loadMsg"); if(m) m.textContent=loadMsgs[Math.min(loadMsgs.length-1,Math.floor(p*loadMsgs.length))]; if(p>=1) setTimeout(loadDone,500); }
-function loadDone(){ const l=document.getElementById("loader"); if(l&&!l.classList.contains("done")){ l.classList.add("done"); setTimeout(()=>l.hidden=true,900); } }
+const loadT0=performance.now();
+function loadDone(){ const l=document.getElementById("loader"); if(!l||l.classList.contains("done")) return; const wait=3200-(performance.now()-loadT0); if(wait>0){ setTimeout(loadDone,wait); return; } l.classList.add("done"); setTimeout(()=>l.hidden=true,900); }
 setTimeout(()=>{ const k=document.getElementById("loadSkip"); if(k){ k.hidden=false; k.onclick=loadDone; } },12000);
 setTimeout(loadDone,40000);
 function loadPacked(name){ if(packQ[name]) return packQ[name];
