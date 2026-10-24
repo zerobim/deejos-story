@@ -39,6 +39,16 @@ a{color:var(--pool)}
 .stage canvas{display:block;width:100%;height:100%}
 .stage::after{content:"";position:absolute;inset:0;pointer-events:none;
   background:linear-gradient(90deg,rgba(8,20,48,.86) 0%,rgba(8,20,48,.55) 30%,rgba(8,20,48,0) 56%)}
+.loader{position:absolute;inset:0;z-index:5;display:grid;place-items:center;padding:24px;text-align:center;
+  background:radial-gradient(ellipse at 60% 70%,rgba(70,199,238,.18),transparent 55%),var(--night);transition:opacity .8s ease}
+.loader.done{opacity:0;pointer-events:none}
+.loader .box{max-width:380px;display:grid;gap:14px;justify-items:center}
+.loader .k{font:500 11px/1.2 var(--f-data);letter-spacing:.16em;text-transform:uppercase;color:var(--lamp)}
+.loader .h{font:400 26px/1.2 var(--f-display);color:var(--plaster)}
+.loader .m{color:var(--mist);font-size:14.5px;min-height:2.6em}
+.loader .bar{width:220px;height:2px;background:var(--line);border-radius:2px;overflow:hidden}
+.loader .bar i{display:block;height:100%;width:0;background:var(--lamp);transition:width .4s ease}
+.loader .skip{appearance:none;background:none;border:1px solid var(--line);color:var(--mist);border-radius:2px;padding:7px 12px;font:500 12px/1 var(--f-body);cursor:pointer}
 .fallback{position:absolute;inset:0;display:grid;place-items:center;padding:24px;text-align:center;color:var(--mist);
   background:radial-gradient(ellipse at 60% 70%,rgba(70,199,238,.35),transparent 45%),linear-gradient(180deg,var(--dusk),var(--night))}
 
@@ -192,6 +202,13 @@ input[type=range]{width:100%;accent-color:var(--lamp);height:28px}
 <div class="story" id="story">
   <div class="stage" id="stage">
     <canvas id="c" aria-label="3D model of a pool villa that changes as you scroll"></canvas>
+    <div class="loader" id="loader" role="status" aria-live="polite"><div class="box">
+      <p class="k">Rendering live in your browser</p>
+      <p class="h">Preparing your villa</p>
+      <p class="m" id="loadMsg">Building the 3D model, materials and lighting. This takes a few moments the first time.</p>
+      <div class="bar"><i id="loadBar"></i></div>
+      <button class="skip" type="button" id="loadSkip" hidden>Start now</button>
+    </div></div>
     <div class="fallback" id="fallback" hidden>This browser could not start the 3D view. The story below still reads in full.</div>
 
     <div class="ov" id="ovTagsA"></div>
@@ -221,6 +238,7 @@ input[type=range]{width:100%;accent-color:var(--lamp);height:28px}
         <h1>Let your buyers live in the villa <em>before</em> the first slab is cast.</h1>
         <p class="lede">This is one of your pool villas, rebuilt as a working model. Scroll through it to see what a dedicated BIM and visualization specialist adds to every house and apartment you design.</p>
         <div class="cue"><i></i>Scroll</div>
+        <p class="lede" style="font-size:13.5px;opacity:.7">Everything you see is rendered live, in real time, in your browser. Best experienced on a laptop or desktop.</p>
       </div>
     </section>
 
@@ -533,8 +551,15 @@ const pmrem=new THREE.PMREMGenerator(renderer);
 const envRoom=pmrem.fromScene(new THREE.RoomEnvironment(),0.04).texture;
 let envDay=envRoom, envDusk=envRoom;
 const packQ={};
+const LOAD={total:8,done:0};
+const loadMsgs=["Building the 3D model, materials and lighting. This takes a few moments the first time.","Placing the furniture and the family on site…","Lighting the pool and the terrace for blue hour…","Almost ready. Real-time rendering of this quality usually needs a render studio."];
+function loadTick(){ LOAD.done++; const p=Math.min(1,LOAD.done/LOAD.total); const b=document.getElementById("loadBar"); if(b) b.style.width=Math.round(p*100)+"%";
+  const m=document.getElementById("loadMsg"); if(m) m.textContent=loadMsgs[Math.min(loadMsgs.length-1,Math.floor(p*loadMsgs.length))]; if(p>=1) setTimeout(loadDone,500); }
+function loadDone(){ const l=document.getElementById("loader"); if(l&&!l.classList.contains("done")){ l.classList.add("done"); setTimeout(()=>l.hidden=true,900); } }
+setTimeout(()=>{ const k=document.getElementById("loadSkip"); if(k){ k.hidden=false; k.onclick=loadDone; } },12000);
+setTimeout(loadDone,40000);
 function loadPacked(name){ if(packQ[name]) return packQ[name];
-  packQ[name]=new Promise((res,rej)=>{ const sc=document.createElement("script"); sc.src="assets/"+name+".js";
+  packQ[name]=new Promise((res,rej)=>{ const sc=document.createElement("script"); sc.src="assets/"+name+".js"; sc.addEventListener("load",loadTick); sc.addEventListener("error",loadTick);
     sc.onload=()=>{ const z=window.__ZB||{}, b64=z[name]; if(!b64){ rej(new Error("missing "+name)); return; } const bin=atob(b64); const u=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i); delete z[name]; res(u.buffer); };
     sc.onerror=()=>rej(new Error("load "+name)); document.head.appendChild(sc); });
   return packQ[name]; }
@@ -1178,7 +1203,7 @@ const clayCol=C("#EDEBE6"), dayTop=C("#2f6fc4"), dayHor=C("#cfe1f0"), duskTop=C(
 const lowDay=C("#6C7F69"), lowDusk=C("#0B1838"), cloudDay=C("#f4f6f8"), cloudDusk=C("#2d4378");
 const edgeDark=C("#23324f"), edgeAR=C("#46C7EE");
 const sunWarm=C("#FFB46B"), sunWhite=C("#FFF4E2"), moon=C("#7E97E6");
-let last=performance.now(), time=0, running=true, wasInside=false;
+let last=performance.now(), time=0, running=true, wasInside=false, perfN=0, perfT=0, quality=2;
 document.addEventListener("visibilitychange",()=>{running=!document.hidden; if(running){last=performance.now();requestAnimationFrame(loop);}});
 
 function blend(tt){
@@ -1349,6 +1374,8 @@ function loop(now){
     });
   });
 
+  perfN++; perfT+=dt; if(perfT>2.5){ const fps=perfN/perfT; perfN=0; perfT=0;
+    if(fps<28 && quality>0){ quality--; renderer.setPixelRatio(quality===1?1:0.8); if(quality===0){ sun.shadow.mapSize.set(1024,1024); if(sun.shadow.map){ sun.shadow.map.dispose(); sun.shadow.map=null; } } const r=stage.getBoundingClientRect(); renderer.setSize(r.width,r.height,false); } }
   renderer.render(scene,camera);
   if(pTab&&pTab.holder.visible&&pTab.dev&&weight(5)>0.25){
     const e=pTab.dev.getWorldPosition(new THREE.Vector3()); camTab.position.copy(e).add(new THREE.Vector3(0,.12,.05)); camTab.lookAt(0.5,3.4,-1.5); camTab.aspect=inset.w/inset.h; camTab.fov=52; camTab.updateProjectionMatrix();
